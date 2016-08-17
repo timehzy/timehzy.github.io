@@ -1,0 +1,157 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="Keywords" content="blog"/>
+    <meta name="Description" content="blog"/>
+    <title>Simple</title>
+    <link rel="shortcut icon" href="/static/favicon.png"/>
+    <link rel="stylesheet" type="text/css" href="/main.css" />
+</head>
+<body>
+<div class="main">
+    <div class="header">
+    	<ul id="pages">
+            <li><a href="/">home</a></li>
+            <li><a href="/#/tags">tags</a></li>
+            <li><a href="/#/archive">archive</a></li>
+    	</ul>
+    </div>
+	<div class="wrap-header">
+			<h1>
+            <a href="/" id="title"></a>
+			</h1>
+	</div>
+<div id="md" style="display: none;">
+<!-- markdown -->
+在进行地图应用开发的时候经常使用图片自定义标记物。但是如果有这样的需求：根据服务器返回数据的时间距当前时间的远近展示不同透明度的标记物，该怎么办呢？
+
+我是这样实现的。首先要实现自定义的annotation，应该先创建一个遵守<MKAnnotation>的类，头文件应该是这样的：
+```
+#import <Foundation/Foundation.h>
+#import <MapKit/MapKit.h>
+
+@interface HZYAnnotation : NSObject<MKAnnotation>
+@property (nonatomic) CLLocationCoordinate2D coordinate;
+@property (nonatomic, copy) NSString *title;
+@property (nonatomic, copy) NSString *subtitle;
+@end
+```
+为了实现我们的需求，现在给这个类添加一个属性，用来记录标记物的透明度
+```
+@property (nonatomic, assign) CGFloat alpha;
+```
+
+接下来，在mapView所在的控制器中实现MKMapView的这个代理方法
+```
+- (MKAnnotationView *)mapView:(MKMapView *)mapView viewForAnnotation:(HZYAnnotation *)annotation{
+    static NSString *ID = @"anno";
+    if ([annotation isKindOfClass:[MKUserLocation class]]) {
+        return nil;
+    }
+    MKAnnotationView *annoView = [mapView dequeueReusableAnnotationViewWithIdentifier:ID];
+    if (annoView == nil) {
+        annoView = [[MKAnnotationView alloc]initWithAnnotation:annotation reuseIdentifier:ID];
+    }
+    annoView.canShowCallout = YES;
+    annoView.image = [[UIImage imageNamed:@"danger_dot"] imageByApplyingAlpha:annotation.alpha];
+    return annoView;
+}
+```
+亮点就在倒数第三行，annoView的image，通过annotation的alpha属性设置了透明度。为什么不直接设置annoView的alpha？因为这样做会导致Callout（就是点击标记物出现的小标签）的透明度一起变化。
+
+最后，在添加标记物的方法中给annotation的alpha属性赋值就可以了，例如这样：
+```
+HZYAnnotation *annotation = [[HZYAnnotation alloc]init];
+CLLocationCoordinate2D coordinate = CLLocationCoordinate2DMake(anno.latitude, anno.longitude);
+annotation.coordinate = coordinate;
+annotation.title = anno.addr;
+annotation.subtitle = [self caculateHourBefore:anno.time];
+annotation.alpha = 1 - (currentDate - anno.time) / (60 * 60 * 4.0);
+[self.mapView addAnnotation:annotation];
+```
+
+扩展开来，通过这个思路，你可以为HZYAnnotion这个类添加任何属性，并据此来改变标记物的样式。
+<!-- markdown end -->
+</div>
+<div class="entry" id="main">
+<!-- content -->
+
+<!-- content end -->
+</div>
+<br>
+<br>
+    <div id="disqus_thread"></div>
+	<div class="footer">
+		<p>© Copyright 2014 by isnowfy, Designed by isnowfy</p>
+	</div>
+</div>
+<script src="main.js"></script>
+<script id="content" type="text/mustache">
+    <h1>{{title}}</h1>
+    <div class="tag">
+    {{date}}
+    {{#tags}}
+    <a href="/#/tag/{{name}}">#{{name}}</a>
+    {{/tags}}
+    </div>
+</script>
+<script id="pagesTemplate" type="text/mustache">
+    {{#pages}}
+    <li>
+        <a href="{{path}}">{{title}}</a>
+    </li>
+    {{/pages}}
+</script>
+<script>
+$(document).ready(function() {
+    $.ajax({
+        url: "main.json",
+        type: "GET",
+        dataType: "json",
+        success: function(data) {
+            $("#title").html(data.name);
+            var pages = [];
+            //path
+            var path = "annowithdata.html";
+            //path end
+            var now = 0;
+            for (var i = 0; i < data.pages.length; ++i)
+                if (path == data.pages[i].path) {
+                    now = i;
+                    pages.push({"select": true, "path": data.pages[i].path, "title": data.pages[i].title});
+                }
+                else {
+                    pages.push({"select": false, "path": data.pages[i].path, "title": data.pages[i].title});
+                }
+            var pagesTemplate = Hogan.compile($("#pagesTemplate").html());
+            var pagesHtml = pagesTemplate.render({"pages": pages});
+            $("#pages").append(pagesHtml);
+            var post = data.pages[now];
+            var tmp = post.tags.split(" ");
+            var tags = [];
+            for (var i = 0; i < tmp.length; ++i)
+                if (tmp[i].length > 0)
+                    tags.push({"name": tmp[i]});
+            var contentTemplate = Hogan.compile($("#content").html());
+            var contentHtml = contentTemplate.render({"title": post.title, "tags": tags, "date": post.date});
+            $("#main").prepend(contentHtml);
+            if (data.disqus_shortname.length > 0) {
+                var disqus_shortname = data.disqus_shortname;
+                (function() {
+                    var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+                    dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+                    (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+                })();
+            }
+        }
+    });
+});
+</script>
+<script src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+<script type="text/x-mathjax-config">
+    MathJax.Hub.Config({tex2jax: {inlineMath: [['$','$'], ["\\(", "\\)"]], processEscapes: true}});
+</script>
+</body>
+</html>
