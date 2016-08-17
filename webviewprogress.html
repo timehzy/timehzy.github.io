@@ -25,12 +25,124 @@
 	</div>
 <div id="md" style="display: none;">
 <!-- markdown -->
+类似Safari的加载进度条，除了比HUD更加简洁，也有更好的用户体验。HUD会让用户觉得等待的时间很长，因为用户注意力集中在一个没有程度变化的东西上面。而进度条是有程度变化的，所以会让用户产生加载速度比HUD快的错觉。（本人在公司内调查，的确如此）。所以现在就行动吧！
 
+你可能已经注意到了，是WebView进度条而不是UIWebView，没错这个实现真对的不是UIWebView而是WKWebView，什么你不知道WKWebView？赶紧谷歌或者必应一下吧，这个控件要比UIWebView性能强大并且功能丰富，关于WKWebView的使用不属于本篇介绍的范围，感兴趣的可以自行搜索，后续我也会写相关的文章的。
+
+好，废话不多说，进入正题。WKWebView有一个属性``estimatedProgress``，就是当前网页加载的进度，所以首先监听这个属性。
+```
+WKWebView *webView = [[WKWebView alloc]initWithFrame:[UIScreen mainScreen].bounds];
+[webView addObserver:self forKeyPath:@"estimatedProgress" options:NSKeyValueObservingOptionNew context:nil];
+self.webView = webView;
+```
+接下来，就是弄一个进度条啦，在viewDidLoad方法里面写：
+```
+    UIView *progress = [[UIView alloc]initWithFrame:CGRectMake(0, 64, CGRectGetWidth(self.view.frame), 3)];
+    progress.backgroundColor = [UIColor clearColor];
+    [self.view addSubview:progress];
+    
+    CALayer *layer = [CALayer layer];
+    layer.frame = CGRectMake(0, 0, 0, 3);
+    layer.backgroundColor = COLOR_BAR_TIN.CGColor;
+    [progress.layer addSublayer:layer];
+    self.progresslayer = layer;
+```
+为什么要用CALayer？隐式动画啊。然后就是监听方法啦
+```
+- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSString *,id> *)change context:(void *)context{
+    if ([keyPath isEqualToString:@"estimatedProgress"]) {
+        self.progresslayer.opacity = 1;
+        //不要让进度条倒着走...有时候goback会出现这种情况
+        if ([change[@"new"] floatValue] < [change[@"old"] floatValue]) {
+            return;
+        }
+        self.progresslayer.frame = CGRectMake(0, 0, self.view.bounds.size.width * [change[@"new"] floatValue], 3);
+        if ([change[@"new"] floatValue] == 1) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                self.progresslayer.opacity = 0;
+            });
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                self.progresslayer.frame = CGRectMake(0, 0, 0, 3);
+            });
+        }
+    }else{
+        [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+    }
+}
+```
+拷贝到自己的项目里面就OK啦，是不是很爽呢？最后别忘了取消监听...
+```
+- (void)dealloc{
+    [self.webView removeObserver:self forKeyPath:@"estimatedProgress"];
+}
+```
+拿过去给产品show，告诉他你各种深度优化，让网页加载提速了，他肯定会说，「牛逼！」。
+
+应大家要求，搞了个demo：
+https://github.com/timehzy/WebViewWithProgressLine
 <!-- markdown end -->
 </div>
 <div class="entry" id="main">
 <!-- content -->
+<p>类似Safari的加载进度条，除了比HUD更加简洁，也有更好的用户体验。HUD会让用户觉得等待的时间很长，因为用户注意力集中在一个没有程度变化的东西上面。而进度条是有程度变化的，所以会让用户产生加载速度比HUD快的错觉。（本人在公司内调查，的确如此）。所以现在就行动吧！</p>
 
+<p>你可能已经注意到了，是WebView进度条而不是UIWebView，没错这个实现真对的不是UIWebView而是WKWebView，什么你不知道WKWebView？赶紧谷歌或者必应一下吧，这个控件要比UIWebView性能强大并且功能丰富，关于WKWebView的使用不属于本篇介绍的范围，感兴趣的可以自行搜索，后续我也会写相关的文章的。</p>
+
+<p>好，废话不多说，进入正题。WKWebView有一个属性<code>estimatedProgress</code>，就是当前网页加载的进度，所以首先监听这个属性。</p>
+
+<pre><code>WKWebView *webView = [[WKWebView alloc]initWithFrame:[UIScreen mainScreen].bounds];
+[webView addObserver:self forKeyPath:@"estimatedProgress" options:NSKeyValueObservingOptionNew context:nil];
+self.webView = webView;
+</code></pre>
+
+<p>接下来，就是弄一个进度条啦，在viewDidLoad方法里面写：</p>
+
+<pre><code>    UIView *progress = [[UIView alloc]initWithFrame:CGRectMake(0, 64, CGRectGetWidth(self.view.frame), 3)];
+    progress.backgroundColor = [UIColor clearColor];
+    [self.view addSubview:progress];
+
+    CALayer *layer = [CALayer layer];
+    layer.frame = CGRectMake(0, 0, 0, 3);
+    layer.backgroundColor = COLOR_BAR_TIN.CGColor;
+    [progress.layer addSublayer:layer];
+    self.progresslayer = layer;
+</code></pre>
+
+<p>为什么要用CALayer？隐式动画啊。然后就是监听方法啦</p>
+
+<pre><code>- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary&lt;NSString *,id&gt; *)change context:(void *)context{
+    if ([keyPath isEqualToString:@"estimatedProgress"]) {
+        self.progresslayer.opacity = 1;
+        //不要让进度条倒着走...有时候goback会出现这种情况
+        if ([change[@"new"] floatValue] &lt; [change[@"old"] floatValue]) {
+            return;
+        }
+        self.progresslayer.frame = CGRectMake(0, 0, self.view.bounds.size.width * [change[@"new"] floatValue], 3);
+        if ([change[@"new"] floatValue] == 1) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                self.progresslayer.opacity = 0;
+            });
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                self.progresslayer.frame = CGRectMake(0, 0, 0, 3);
+            });
+        }
+    }else{
+        [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+    }
+}
+</code></pre>
+
+<p>拷贝到自己的项目里面就OK啦，是不是很爽呢？最后别忘了取消监听...</p>
+
+<pre><code>- (void)dealloc{
+    [self.webView removeObserver:self forKeyPath:@"estimatedProgress"];
+}
+</code></pre>
+
+<p>拿过去给产品show，告诉他你各种深度优化，让网页加载提速了，他肯定会说，「牛逼！」。</p>
+
+<p>应大家要求，搞了个demo：
+https://github.com/timehzy/WebViewWithProgressLine</p>
 <!-- content end -->
 </div>
 <br>
